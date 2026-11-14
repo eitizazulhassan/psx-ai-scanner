@@ -1,0 +1,62 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PSX AI Scanner</title>
+<style>
+body {
+  font-family: Arial, sans-serif;
+  background: #101827;
+  color: white;
+  padding: 15px;
+}
+h1 { color: #38bdf8; text-align: center; }
+input, select, button {
+  padding: 12px;
+  margin: 5px 0;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+}
+button { background: #16a34a; color: white; border: 0; }
+.card {
+  background: #1e293b;
+  padding: 16px;
+  border-radius: 12px;
+  margin-top: 15px;
+}
+</style>
+</head>
+<body>
+<h1>PSX AI Scanner</h1>
+<p>Intraday & Swing Trading Dashboard</p>
+
+<input id="stock" placeholder="Enter stock e.g. NML">
+<select id="mode">
+<option>Intraday</option>
+<option>Swing</option>
+</select>
+<button onclick="scan()">Scan Stock</button>
+
+<div class="card" id="result">
+Welcome! Enter a PSX stock symbol.
+</div>
+
+<script>
+function scan() {
+  const stock = document.getElementById("stock").value
+    .trim().toUpperCase();
+  const mode = document.getElementById("mode").value;
+  const result = document.getElementById("result");
+  if (!stock) {
+    result.textContent = "Please enter a stock symbol.";
+    return;
+  }
+  result.textContent = stock + " | " + mode +
+    " | Scanner interface ready. Live market data not connected yet.";
+}
+</script>
+</body>
+</html>
