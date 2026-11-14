@@ -4,190 +4,249 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PSX AI Scanner V3</title>
+<title>PSX AI Scanner V4</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:16px;background:#0f172a;color:#f8fafc;font-family:Arial,sans-serif}
-h1{text-align:center;color:#38bdf8;font-size:29px}
-h2{font-size:20px}
+body{margin:0;background:#0f172a;color:#f8fafc;font-family:Arial,sans-serif;padding:16px}
+h1{color:#38bdf8;text-align:center}
 p,small{color:#cbd5e1}
-.tabs{display:flex;gap:8px;margin:20px 0}
-button{background:#16a34a;color:white;border:0;cursor:pointer;font-weight:bold}
-.tabs button{flex:1;background:#334155}
-.tabs button.active{background:#0284c7}
-button,input,textarea,select{padding:12px;border-radius:9px;font-size:15px}
-input,textarea,select{width:100%;margin:8px 0}
-textarea{height:105px}
-.action{width:100%;margin:12px 0}
-.card{background:#1e293b;border-radius:12px;padding:15px;margin:12px 0;line-height:1.8;overflow-wrap:anywhere}
+button,input,select{width:100%;padding:13px;margin:7px 0;border-radius:9px;font-size:15px}
+button{background:#16a34a;color:white;border:0;font-weight:bold}
+.tabs{display:flex;gap:8px}
+.tabs button{background:#334155}
+.tabs .active{background:#0284c7}
+.card{background:#1e293b;padding:16px;border-radius:12px;margin:15px 0;line-height:1.8}
+.hidden{display:none}
 .good{color:#4ade80}
 .warn{color:#facc15}
 .bad{color:#fb7185}
-.hidden{display:none}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th,td{padding:9px 5px;border-bottom:1px solid #475569;text-align:left}
-.tablewrap{overflow-x:auto}
-.note{font-size:12px;color:#94a3b8}
+td,th{padding:8px;border-bottom:1px solid #475569;text-align:left}
+.scroll{overflow-x:auto}
 </style>
 </head>
 <body>
-<h1>PSX AI Scanner</h1>
-<p style="text-align:center">Automatic & Single Stock Analysis</p>
+<h1>PSX AI Scanner V4</h1>
+<p style="text-align:center">Automatic & Single Stock Scanner</p>
 
 <div class="tabs">
-<button id="autoTab" class="active" onclick="showTab('auto')">Automatic Scanner</button>
-<button id="singleTab" onclick="showTab('single')">Single Stock</button>
+<button id="b1" class="active" onclick="tab('auto')">Automatic</button>
+<button id="b2" onclick="tab('single')">Single Stock</button>
 </div>
 
-<div id="autoPanel">
 <div class="card">
-<h2>Market Scanner</h2>
-<p>Upload historical PSX CSV data to scan multiple stocks.</p>
-<input type="file" id="csv" accept=".csv,text/csv">
-<p class="note">CSV columns: symbol,date,close,volume</p>
-<button class="action" onclick="loadCSV()">Load & Scan Market</button>
-<div id="autoResult">No market data loaded.</div>
-</div>
-</div>
-
-<div id="singlePanel" class="hidden">
-<div class="card">
-<h2>Single Stock Scanner</h2>
-<input id="symbol" placeholder="Stock e.g. NML">
+<label>Trading Mode</label>
 <select id="mode">
-<option>Swing</option>
-<option>Intraday</option>
+<option value="swing">Swing (Daily Data)</option>
+<option value="intraday">Intraday (Not Available Yet)</option>
 </select>
-<p>Closing prices: oldest to newest</p>
-<textarea id="prices" placeholder="At least 51 prices separated by commas"></textarea>
-<p>Matching trading volumes</p>
-<textarea id="volumes" placeholder="At least 51 volumes separated by commas"></textarea>
-<button class="action" onclick="singleScan()">Analyze Stock</button>
-<div id="singleResult">Waiting for data.</div>
 </div>
+
+<div id="auto" class="card">
+<h2>Automatic Market Scanner</h2>
+<p>Scan available PSX stocks using historical data.</p>
+<button onclick="scanAll()">Scan All PSX Stocks</button>
+<p id="progress">Waiting to start.</p>
+<div id="market"></div>
+</div>
+
+<div id="single" class="card hidden">
+<h2>Single Stock Scanner</h2>
+<input id="symbol" placeholder="Enter symbol e.g. NML">
+<button onclick="scanOne()">Analyze Stock</button>
+<div id="result">Enter a stock symbol.</div>
 </div>
 
 <div class="card">
-<b>Data Status: Manual / CSV only</b>
-<p class="note">No live PSX API connected. Results are rule-based technical calculations, not AI predictions or guaranteed trading signals.</p>
+<b>Market Data Status</b>
+<p id="status">API connection not tested.</p>
+<small>Rule-based educational scanner. Not investment advice. No guaranteed profits.</small>
 </div>
 
 <script>
-function showTab(t){
-document.getElementById("autoPanel").classList.toggle("hidden",t!=="auto");
-document.getElementById("singlePanel").classList.toggle("hidden",t!=="single");
-document.getElementById("autoTab").classList.toggle("active",t==="auto");
-document.getElementById("singleTab").classList.toggle("active",t==="single");
+const API="https://psxdata-api.fastapicloud.dev";
+const $=id=>document.getElementById(id);
+const fmt=n=>n==null?"N/A":Number(n).toFixed(2);
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+
+function tab(t){
+$("auto").classList.toggle("hidden",t!=="auto");
+$("single").classList.toggle("hidden",t!=="single");
+$("b1").classList.toggle("active",t==="auto");
+$("b2").classList.toggle("active",t==="single");
 }
-function avg(a){return a.reduce((x,y)=>x+y,0)/a.length}
+
 function rsi(p){
-let g=0,l=0;
+let gain=0,loss=0;
 for(let i=p.length-14;i<p.length;i++){
 let d=p[i]-p[i-1];
-if(d>0)g+=d;else l-=d;
+if(d>0)gain+=d;else loss-=d;
 }
-if(g===0&&l===0)return 50;
-if(l===0)return 100;
-return 100-100/(1+g/l);
+if(!gain&&!loss)return 50;
+if(!loss)return 100;
+return 100-100/(1+gain/loss);
 }
-function analyze(p,v){
-if(p.length<51||p.length!==v.length)return null;
-if(p.some(x=>!Number.isFinite(x)||x<=0)||v.some(x=>!Number.isFinite(x)||x<0))return null;
-const close=p.at(-1),s20=avg(p.slice(-20)),s50=avg(p.slice(-50));
+
+function analyze(rows){
+if(rows.length<51)return null;
+const p=rows.map(r=>r.close);
+const v=rows.map(r=>r.volume);
+const close=p.at(-1);
+const sma20=avg(p.slice(-20));
+const sma50=avg(p.slice(-50));
 const strength=rsi(p);
-const av=avg(v.slice(-21,-1));
-const vr=av>0?v.at(-1)/av:0;
+const baseVolume=avg(v.slice(-21,-1));
+const ratio=baseVolume>0?v.at(-1)/baseVolume:0;
 const resistance=Math.max(...p.slice(-21,-1));
 const support=Math.min(...p.slice(-10));
-const breakout=close>resistance&&vr>=1.5&&close>s20&&s20>s50&&strength>=50&&strength<75;
-const near=close>=s20*.98&&close<=s20*1.02&&s20>=s50*.99&&strength>=45;
-const status=breakout?"BREAKOUT":near?"NEAR BULLISH":"WAIT";
+const breakout=close>resistance&&
+close>sma20&&sma20>sma50&&
+strength>=50&&strength<75&&ratio>=1.5;
+const near=close>=sma20*.98&&
+close<=sma20*1.02&&
+sma20>=sma50*.99&&strength>=45;
+const signal=breakout?"BREAKOUT":
+near?"NEAR BULLISH":"WAIT";
 const entry=breakout?close:null;
-const stop=entry?Math.min(s20,support):null;
-const risk=stop!==null&&stop<entry?entry-stop:null;
-return {close,s20,s50,strength,vr,status,
-entry:risk?entry:null,stop:risk?stop:null,target:risk?entry+2*risk:null};
+const stop=entry?Math.min(support,sma20):null;
+const risk=entry&&stop<entry?entry-stop:null;
+return {
+close,sma20,sma50,strength,ratio,signal,
+entry:risk?entry:null,
+stop:risk?stop:null,
+target:risk?entry+2*risk:null,
+date:rows.at(-1).date
+};
 }
-function numlist(s){return s.split(/[\s,]+/).filter(Boolean).map(Number)}
-function fmt(x){return x===null?"WAIT":x.toFixed(2)}
-function singleScan(){
-const symbol=document.getElementById("symbol").value.trim().toUpperCase();
-const p=numlist(document.getElementById("prices").value);
-const v=numlist(document.getElementById("volumes").value);
-const out=document.getElementById("singleResult");
-const a=analyze(p,v);
-if(!symbol||!a){out.textContent="Enter a stock symbol and at least 51 valid matching prices and volumes.";return}
-out.innerHTML=`<h2>${symbol.replace(/[^A-Z0-9.-]/g,"")}</h2>
-<b>${a.status}</b><hr>
-Last Close: ${fmt(a.close)}<br>
-SMA 20: ${fmt(a.s20)}<br>
-SMA 50: ${fmt(a.s50)}<br>
-RSI 14 (simple): ${a.strength.toFixed(1)}<br>
-Volume Ratio: ${a.vr.toFixed(2)}x<br>
+
+async function request(path){
+const controller=new AbortController();
+const timer=setTimeout(()=>controller.abort(),15000);
+try{
+const response=await fetch(API+path,{
+signal:controller.signal,
+headers:{"Accept":"application/json"}
+});
+if(!response.ok)throw Error("HTTP "+response.status);
+return await response.json();
+}finally{clearTimeout(timer)}
+}
+
+function normalize(data){
+let items=Array.isArray(data)?data:
+Array.isArray(data.data)?data.data:
+Array.isArray(data.history)?data.history:
+Array.isArray(data.results)?data.results:null;
+if(!items)throw Error("Unknown historical data format");
+const rows=items.map(r=>({
+date:String(r.date||r.Date||""),
+close:Number(r.close??r.Close),
+volume:Number(r.volume??r.Volume)
+})).filter(r=>r.date&&
+Number.isFinite(r.close)&&r.close>0&&
+Number.isFinite(r.volume)&&r.volume>=0);
+rows.sort((a,b)=>a.date.localeCompare(b.date));
+return [...new Map(rows.map(r=>[r.date,r])).values()];
+}
+
+async function getStock(symbol){
+const end=new Date();
+const start=new Date(end);
+start.setDate(start.getDate()-160);
+const date=d=>d.toISOString().slice(0,10);
+const path="/stocks/"+encodeURIComponent(symbol)+
+"/historical?start="+date(start)+"&end="+date(end);
+const data=await request(path);
+const rows=normalize(data);
+return analyze(rows);
+}
+
+function modeCheck(){
+if($("mode").value==="intraday"){
+alert("Intraday requires separate intraday data. Daily candles cannot produce live intraday signals.");
+return false;
+}
+return true;
+}
+
+function showAnalysis(a,symbol){
+if(!a)return "Insufficient data: at least 51 trading days required.";
+return `<h2>${symbol}</h2>
+<b class="${a.signal==="BREAKOUT"?"good":"warn"}">${a.signal}</b><hr>
+Data Date: ${a.date}<br>
+Last Close: Rs ${fmt(a.close)}<br>
+SMA 20: ${fmt(a.sma20)}<br>
+SMA 50: ${fmt(a.sma50)}<br>
+RSI 14 (Simple): ${fmt(a.strength)}<br>
+Volume Ratio: ${fmt(a.ratio)}x<hr>
 Entry: ${fmt(a.entry)}<br>
 Target (2R): ${fmt(a.target)}<br>
 Stop Loss: ${fmt(a.stop)}<br>
-<small>Daily data supports swing screening, not live intraday signals.</small>`;
+<small>Indicative breakout levels only. Check latest data before trading.</small>`;
 }
-function parseCSVLine(line){
-let result=[],field="",quoted=false;
-for(let i=0;i<line.length;i++){
-let c=line[i];
-if(c==='"'&&quoted&&line[i+1]==='"'){field+='"';i++}
-else if(c==='"')quoted=!quoted;
-else if(c===','&&!quoted){result.push(field.trim());field=""}
-else field+=c;
+
+async function scanOne(){
+if(!modeCheck())return;
+const symbol=$("symbol").value.trim().toUpperCase();
+if(!/^[A-Z0-9.-]{1,20}$/.test(symbol)){
+$("result").textContent="Enter a valid stock symbol.";
+return;
 }
-result.push(field.trim());
-return result;
-}
-async function loadCSV(){
-const file=document.getElementById("csv").files[0];
-const out=document.getElementById("autoResult");
-if(!file){out.textContent="Please select a CSV file.";return}
+$("result").textContent="Loading historical data...";
 try{
-const text=await file.text();
-const lines=text.replace(/^\uFEFF/,"").trim().split(/\r?\n/);
-const header=parseCSVLine(lines.shift()).map(x=>x.toLowerCase());
-const idx=["symbol","date","close","volume"].map(x=>header.indexOf(x));
-if(idx.includes(-1)){out.textContent="CSV must contain symbol,date,close,volume columns.";return}
-const groups={};
-for(const line of lines){
-if(!line.trim())continue;
-const c=parseCSVLine(line);
-const symbol=(c[idx[0]]||"").toUpperCase().trim();
-const date=(c[idx[1]]||"").trim();
-const close=Number(c[idx[2]]);
-const volume=Number(c[idx[3]]);
-if(!/^[A-Z0-9.-]+$/.test(symbol)||!date||
-!Number.isFinite(close)||close<=0||
-!Number.isFinite(volume)||volume<0)continue;
-(groups[symbol]??=[]).push({date,close,volume});
+const a=await getStock(symbol);
+$("result").innerHTML=showAnalysis(a,symbol);
+$("status").textContent="Historical API request succeeded.";
+}catch(e){
+$("result").textContent="Data unavailable: "+e.message;
+$("status").textContent="API connection failed or response format unsupported. Check browser access and data source.";
 }
-const results=[];
-for(const [symbol,rows] of Object.entries(groups)){
-rows.sort((a,b)=>a.date.localeCompare(b.date));
-const unique=[...new Map(rows.map(r=>[r.date,r])).values()];
-const a=analyze(unique.map(r=>r.close),unique.map(r=>r.volume));
-if(a)results.push({symbol,...a,date:unique.at(-1).date});
+}
+
+async function scanAll(){
+if(!modeCheck())return;
+$("progress").textContent="Loading PSX stock list...";
+$("market").textContent="";
+try{
+const response=await request("/stocks");
+const raw=Array.isArray(response)?response:
+Array.isArray(response.data)?response.data:
+Array.isArray(response.stocks)?response.stocks:null;
+if(!raw)throw Error("Stock list format not supported");
+const symbols=[...new Set(raw.map(x=>
+typeof x==="string"?x:
+x.symbol??x.ticker??""
+).map(x=>String(x).toUpperCase())
+.filter(x=>/^[A-Z0-9.-]{1,20}$/.test(x)))];
+if(!symbols.length)throw Error("No stock symbols returned");
+const found=[];
+let failures=0;
+for(let i=0;i<symbols.length;i++){
+$("progress").textContent="Scanning "+(i+1)+
+"/"+symbols.length+" | Errors: "+failures;
+try{
+const a=await getStock(symbols[i]);
+if(a)found.push({symbol:symbols[i],...a});
+}catch(e){failures++}
 }
 const order={"BREAKOUT":0,"NEAR BULLISH":1,"WAIT":2};
-results.sort((a,b)=>order[a.status]-order[b.status]||b.vr-a.vr);
-if(!results.length){out.textContent="No stocks have at least 51 valid historical rows.";return}
-const bullish=results.filter(x=>x.status==="BREAKOUT").length;
-const near=results.filter(x=>x.status==="NEAR BULLISH").length;
-let html=`<p>Scanned: ${results.length} stocks<br>Breakouts: ${bullish}<br>Near Bullish: ${near}</p>
-<div class="tablewrap"><table><thead><tr>
-<th>Stock</th><th>Status</th><th>Close</th><th>Volume</th><th>RSI</th><th>Entry</th><th>Target</th><th>Stop</th>
-</tr></thead><tbody>`;
-for(const a of results){
-html+=`<tr><td>${a.symbol}</td><td>${a.status}</td>
-<td>${fmt(a.close)}</td><td>${a.vr.toFixed(1)}x</td>
-<td>${a.strength.toFixed(0)}</td><td>${fmt(a.entry)}</td>
-<td>${fmt(a.target)}</td><td>${fmt(a.stop)}</td></tr>`;
+found.sort((a,b)=>order[a.signal]-order[b.signal]||
+b.ratio-a.ratio);
+$("progress").textContent="Completed: "+found.length+
+" analyzed, "+failures+" failed.";
+let html="<div class='scroll'><table><tr><th>Stock</th><th>Signal</th><th>Close</th><th>Volume x</th><th>Entry</th><th>Target</th><th>Stop</th></tr>";
+for(const a of found){
+html+=`<tr><td>${a.symbol}</td><td>${a.signal}</td>
+<td>${fmt(a.close)}</td><td>${fmt(a.ratio)}</td>
+<td>${fmt(a.entry)}</td><td>${fmt(a.target)}</td>
+<td>${fmt(a.stop)}</td></tr>`;
 }
-out.innerHTML=html+"</tbody></table></div><p class='note'>Data is from uploaded file, not a live market feed. Check each stock's latest date before trading.</p>";
-}catch(e){out.textContent="Could not read CSV. Check file format."}
+$("market").innerHTML=html+"</table></div>";
+$("status").textContent="Scanner completed using available historical API data.";
+}catch(e){
+$("progress").textContent="Automatic scan unavailable: "+e.message;
+$("status").textContent="Check API endpoint, browser CORS permissions and data access.";
+}
 }
 </script>
 </body>
