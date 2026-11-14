@@ -4,100 +4,190 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PSX AI Scanner V2</title>
+<title>PSX AI Scanner V3</title>
 <style>
 *{box-sizing:border-box}
-body{background:#0f172a;color:white;font-family:Arial,sans-serif;padding:16px}
-h1{color:#38bdf8;text-align:center}
-p{color:#cbd5e1}
-input,textarea,select,button{width:100%;padding:13px;margin:8px 0;border-radius:9px;font-size:16px}
-textarea{height:120px}
-button{background:#16a34a;color:white;border:0;font-weight:bold}
-.card{background:#1e293b;padding:16px;border-radius:12px;margin-top:15px;line-height:1.9}
-.good{color:#4ade80}.bad{color:#fb7185}
-small{color:#94a3b8}
+body{margin:0;padding:16px;background:#0f172a;color:#f8fafc;font-family:Arial,sans-serif}
+h1{text-align:center;color:#38bdf8;font-size:29px}
+h2{font-size:20px}
+p,small{color:#cbd5e1}
+.tabs{display:flex;gap:8px;margin:20px 0}
+button{background:#16a34a;color:white;border:0;cursor:pointer;font-weight:bold}
+.tabs button{flex:1;background:#334155}
+.tabs button.active{background:#0284c7}
+button,input,textarea,select{padding:12px;border-radius:9px;font-size:15px}
+input,textarea,select{width:100%;margin:8px 0}
+textarea{height:105px}
+.action{width:100%;margin:12px 0}
+.card{background:#1e293b;border-radius:12px;padding:15px;margin:12px 0;line-height:1.8;overflow-wrap:anywhere}
+.good{color:#4ade80}
+.warn{color:#facc15}
+.bad{color:#fb7185}
+.hidden{display:none}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:9px 5px;border-bottom:1px solid #475569;text-align:left}
+.tablewrap{overflow-x:auto}
+.note{font-size:12px;color:#94a3b8}
 </style>
 </head>
 <body>
 <h1>PSX AI Scanner</h1>
-<p>Intraday & Swing Technical Analysis</p>
+<p style="text-align:center">Automatic & Single Stock Analysis</p>
 
-<input id="symbol" placeholder="Stock Symbol e.g. NML">
+<div class="tabs">
+<button id="autoTab" class="active" onclick="showTab('auto')">Automatic Scanner</button>
+<button id="singleTab" onclick="showTab('single')">Single Stock</button>
+</div>
+
+<div id="autoPanel">
+<div class="card">
+<h2>Market Scanner</h2>
+<p>Upload historical PSX CSV data to scan multiple stocks.</p>
+<input type="file" id="csv" accept=".csv,text/csv">
+<p class="note">CSV columns: symbol,date,close,volume</p>
+<button class="action" onclick="loadCSV()">Load & Scan Market</button>
+<div id="autoResult">No market data loaded.</div>
+</div>
+</div>
+
+<div id="singlePanel" class="hidden">
+<div class="card">
+<h2>Single Stock Scanner</h2>
+<input id="symbol" placeholder="Stock e.g. NML">
 <select id="mode">
 <option>Swing</option>
 <option>Intraday</option>
 </select>
+<p>Closing prices: oldest to newest</p>
+<textarea id="prices" placeholder="At least 51 prices separated by commas"></textarea>
+<p>Matching trading volumes</p>
+<textarea id="volumes" placeholder="At least 51 volumes separated by commas"></textarea>
+<button class="action" onclick="singleScan()">Analyze Stock</button>
+<div id="singleResult">Waiting for data.</div>
+</div>
+</div>
 
-<p>Closing prices (oldest to newest, comma separated)</p>
-<textarea id="prices" placeholder="Enter at least 51 closing prices"></textarea>
-
-<p>Volumes (oldest to newest, comma separated)</p>
-<textarea id="volumes" placeholder="Enter matching daily volumes"></textarea>
-
-<button onclick="scan()">Analyze Stock</button>
-<div class="card" id="result">Waiting for market data...</div>
+<div class="card">
+<b>Data Status: Manual / CSV only</b>
+<p class="note">No live PSX API connected. Results are rule-based technical calculations, not AI predictions or guaranteed trading signals.</p>
+</div>
 
 <script>
-function average(a){
- return a.reduce((x,y)=>x+y,0)/a.length;
+function showTab(t){
+document.getElementById("autoPanel").classList.toggle("hidden",t!=="auto");
+document.getElementById("singlePanel").classList.toggle("hidden",t!=="single");
+document.getElementById("autoTab").classList.toggle("active",t==="auto");
+document.getElementById("singleTab").classList.toggle("active",t==="single");
 }
-function rsi(prices){
- let gains=0,losses=0;
- for(let i=prices.length-14;i<prices.length;i++){
-  let d=prices[i]-prices[i-1];
-  if(d>0)gains+=d;
-  else losses-=d;
- }
- if(gains===0&&losses===0)return 50;
- if(losses===0)return 100;
- let rs=gains/losses;
- return 100-100/(1+rs);
+function avg(a){return a.reduce((x,y)=>x+y,0)/a.length}
+function rsi(p){
+let g=0,l=0;
+for(let i=p.length-14;i<p.length;i++){
+let d=p[i]-p[i-1];
+if(d>0)g+=d;else l-=d;
 }
-function scan(){
- const symbol=document.getElementById("symbol").value.trim().toUpperCase();
- const mode=document.getElementById("mode").value;
- const p=document.getElementById("prices").value.split(/[\s,]+/).filter(Boolean).map(Number);
- const v=document.getElementById("volumes").value.split(/[\s,]+/).filter(Boolean).map(Number);
- const out=document.getElementById("result");
- if(!symbol||p.length<51||p.length!==v.length||
- p.some(x=>!Number.isFinite(x)||x<=0)||
- v.some(x=>!Number.isFinite(x)||x<0)){
-  out.textContent="Enter a symbol and at least 51 valid matching closing prices and volumes.";
-  return;
- }
- const last=p[p.length-1];
- const sma20=average(p.slice(-20));
- const sma50=average(p.slice(-50));
- const prev20=average(p.slice(-21,-1));
- const prev50=average(p.slice(-51,-1));
- const strength=rsi(p);
- const avgVol=average(v.slice(-21,-1));
- const volRatio=avgVol>0?v[v.length-1]/avgVol:0;
- const bullish=last>sma20&&sma20>sma50&&strength>=50&&strength<75&&volRatio>=1.5;
- const near=last>=sma20*0.98&&last<=sma20*1.02&&sma20>=sma50*0.99;
- const trend=bullish?"BULLISH CONFIRMED":near?"NEAR BULLISH":"NO CONFIRMED BULLISH SETUP";
- const support=Math.min(...p.slice(-10));
- const resistance=Math.max(...p.slice(-20,-1));
- const entry=bullish&&last>resistance?last:null;
- const stop=entry?Math.min(support,sma20):null;
- const risk=entry&&stop<entry?entry-stop:null;
- const target=risk?entry+2*risk:null;
- out.innerHTML=`
- <h2>${symbol} - ${mode}</h2>
- <b>Signal: <span class="${bullish?'good':'bad'}">${trend}</span></b><hr>
- Last Close: ${last.toFixed(2)}<br>
- SMA 20: ${sma20.toFixed(2)}<br>
- SMA 50: ${sma50.toFixed(2)}<br>
- Previous SMA 20: ${prev20.toFixed(2)}<br>
- Previous SMA 50: ${prev50.toFixed(2)}<br>
- RSI 14 (simple): ${strength.toFixed(1)}<br>
- Volume Ratio: ${volRatio.toFixed(2)}x<br>
- Support (10 bars): ${support.toFixed(2)}<br>
- Resistance (previous 20 bars): ${resistance.toFixed(2)}<hr>
- Entry: ${entry?entry.toFixed(2):"WAIT"}<br>
- Target (2R): ${target?target.toFixed(2):"N/A"}<br>
- Stop Loss: ${risk?stop.toFixed(2):"N/A"}<br>
- <small>Educational calculations only. Daily data cannot establish an intraday signal. RSI uses a simple 14-period method, not Wilder smoothing. No live feed connected.</small>`;
+if(g===0&&l===0)return 50;
+if(l===0)return 100;
+return 100-100/(1+g/l);
+}
+function analyze(p,v){
+if(p.length<51||p.length!==v.length)return null;
+if(p.some(x=>!Number.isFinite(x)||x<=0)||v.some(x=>!Number.isFinite(x)||x<0))return null;
+const close=p.at(-1),s20=avg(p.slice(-20)),s50=avg(p.slice(-50));
+const strength=rsi(p);
+const av=avg(v.slice(-21,-1));
+const vr=av>0?v.at(-1)/av:0;
+const resistance=Math.max(...p.slice(-21,-1));
+const support=Math.min(...p.slice(-10));
+const breakout=close>resistance&&vr>=1.5&&close>s20&&s20>s50&&strength>=50&&strength<75;
+const near=close>=s20*.98&&close<=s20*1.02&&s20>=s50*.99&&strength>=45;
+const status=breakout?"BREAKOUT":near?"NEAR BULLISH":"WAIT";
+const entry=breakout?close:null;
+const stop=entry?Math.min(s20,support):null;
+const risk=stop!==null&&stop<entry?entry-stop:null;
+return {close,s20,s50,strength,vr,status,
+entry:risk?entry:null,stop:risk?stop:null,target:risk?entry+2*risk:null};
+}
+function numlist(s){return s.split(/[\s,]+/).filter(Boolean).map(Number)}
+function fmt(x){return x===null?"WAIT":x.toFixed(2)}
+function singleScan(){
+const symbol=document.getElementById("symbol").value.trim().toUpperCase();
+const p=numlist(document.getElementById("prices").value);
+const v=numlist(document.getElementById("volumes").value);
+const out=document.getElementById("singleResult");
+const a=analyze(p,v);
+if(!symbol||!a){out.textContent="Enter a stock symbol and at least 51 valid matching prices and volumes.";return}
+out.innerHTML=`<h2>${symbol.replace(/[^A-Z0-9.-]/g,"")}</h2>
+<b>${a.status}</b><hr>
+Last Close: ${fmt(a.close)}<br>
+SMA 20: ${fmt(a.s20)}<br>
+SMA 50: ${fmt(a.s50)}<br>
+RSI 14 (simple): ${a.strength.toFixed(1)}<br>
+Volume Ratio: ${a.vr.toFixed(2)}x<br>
+Entry: ${fmt(a.entry)}<br>
+Target (2R): ${fmt(a.target)}<br>
+Stop Loss: ${fmt(a.stop)}<br>
+<small>Daily data supports swing screening, not live intraday signals.</small>`;
+}
+function parseCSVLine(line){
+let result=[],field="",quoted=false;
+for(let i=0;i<line.length;i++){
+let c=line[i];
+if(c==='"'&&quoted&&line[i+1]==='"'){field+='"';i++}
+else if(c==='"')quoted=!quoted;
+else if(c===','&&!quoted){result.push(field.trim());field=""}
+else field+=c;
+}
+result.push(field.trim());
+return result;
+}
+async function loadCSV(){
+const file=document.getElementById("csv").files[0];
+const out=document.getElementById("autoResult");
+if(!file){out.textContent="Please select a CSV file.";return}
+try{
+const text=await file.text();
+const lines=text.replace(/^\uFEFF/,"").trim().split(/\r?\n/);
+const header=parseCSVLine(lines.shift()).map(x=>x.toLowerCase());
+const idx=["symbol","date","close","volume"].map(x=>header.indexOf(x));
+if(idx.includes(-1)){out.textContent="CSV must contain symbol,date,close,volume columns.";return}
+const groups={};
+for(const line of lines){
+if(!line.trim())continue;
+const c=parseCSVLine(line);
+const symbol=(c[idx[0]]||"").toUpperCase().trim();
+const date=(c[idx[1]]||"").trim();
+const close=Number(c[idx[2]]);
+const volume=Number(c[idx[3]]);
+if(!/^[A-Z0-9.-]+$/.test(symbol)||!date||
+!Number.isFinite(close)||close<=0||
+!Number.isFinite(volume)||volume<0)continue;
+(groups[symbol]??=[]).push({date,close,volume});
+}
+const results=[];
+for(const [symbol,rows] of Object.entries(groups)){
+rows.sort((a,b)=>a.date.localeCompare(b.date));
+const unique=[...new Map(rows.map(r=>[r.date,r])).values()];
+const a=analyze(unique.map(r=>r.close),unique.map(r=>r.volume));
+if(a)results.push({symbol,...a,date:unique.at(-1).date});
+}
+const order={"BREAKOUT":0,"NEAR BULLISH":1,"WAIT":2};
+results.sort((a,b)=>order[a.status]-order[b.status]||b.vr-a.vr);
+if(!results.length){out.textContent="No stocks have at least 51 valid historical rows.";return}
+const bullish=results.filter(x=>x.status==="BREAKOUT").length;
+const near=results.filter(x=>x.status==="NEAR BULLISH").length;
+let html=`<p>Scanned: ${results.length} stocks<br>Breakouts: ${bullish}<br>Near Bullish: ${near}</p>
+<div class="tablewrap"><table><thead><tr>
+<th>Stock</th><th>Status</th><th>Close</th><th>Volume</th><th>RSI</th><th>Entry</th><th>Target</th><th>Stop</th>
+</tr></thead><tbody>`;
+for(const a of results){
+html+=`<tr><td>${a.symbol}</td><td>${a.status}</td>
+<td>${fmt(a.close)}</td><td>${a.vr.toFixed(1)}x</td>
+<td>${a.strength.toFixed(0)}</td><td>${fmt(a.entry)}</td>
+<td>${fmt(a.target)}</td><td>${fmt(a.stop)}</td></tr>`;
+}
+out.innerHTML=html+"</tbody></table></div><p class='note'>Data is from uploaded file, not a live market feed. Check each stock's latest date before trading.</p>";
+}catch(e){out.textContent="Could not read CSV. Check file format."}
 }
 </script>
 </body>
