@@ -3,59 +3,101 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PSX AI Scanner</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PSX AI Scanner V2</title>
 <style>
-body {
-  font-family: Arial, sans-serif;
-  background: #101827;
-  color: white;
-  padding: 15px;
-}
-h1 { color: #38bdf8; text-align: center; }
-input, select, button {
-  padding: 12px;
-  margin: 5px 0;
-  width: 100%;
-  box-sizing: border-box;
-  border-radius: 8px;
-}
-button { background: #16a34a; color: white; border: 0; }
-.card {
-  background: #1e293b;
-  padding: 16px;
-  border-radius: 12px;
-  margin-top: 15px;
-}
+*{box-sizing:border-box}
+body{background:#0f172a;color:white;font-family:Arial,sans-serif;padding:16px}
+h1{color:#38bdf8;text-align:center}
+p{color:#cbd5e1}
+input,textarea,select,button{width:100%;padding:13px;margin:8px 0;border-radius:9px;font-size:16px}
+textarea{height:120px}
+button{background:#16a34a;color:white;border:0;font-weight:bold}
+.card{background:#1e293b;padding:16px;border-radius:12px;margin-top:15px;line-height:1.9}
+.good{color:#4ade80}.bad{color:#fb7185}
+small{color:#94a3b8}
 </style>
 </head>
 <body>
 <h1>PSX AI Scanner</h1>
-<p>Intraday & Swing Trading Dashboard</p>
+<p>Intraday & Swing Technical Analysis</p>
 
-<input id="stock" placeholder="Enter stock e.g. NML">
+<input id="symbol" placeholder="Stock Symbol e.g. NML">
 <select id="mode">
-<option>Intraday</option>
 <option>Swing</option>
+<option>Intraday</option>
 </select>
-<button onclick="scan()">Scan Stock</button>
 
-<div class="card" id="result">
-Welcome! Enter a PSX stock symbol.
-</div>
+<p>Closing prices (oldest to newest, comma separated)</p>
+<textarea id="prices" placeholder="Enter at least 51 closing prices"></textarea>
+
+<p>Volumes (oldest to newest, comma separated)</p>
+<textarea id="volumes" placeholder="Enter matching daily volumes"></textarea>
+
+<button onclick="scan()">Analyze Stock</button>
+<div class="card" id="result">Waiting for market data...</div>
 
 <script>
-function scan() {
-  const stock = document.getElementById("stock").value
-    .trim().toUpperCase();
-  const mode = document.getElementById("mode").value;
-  const result = document.getElementById("result");
-  if (!stock) {
-    result.textContent = "Please enter a stock symbol.";
-    return;
-  }
-  result.textContent = stock + " | " + mode +
-    " | Scanner interface ready. Live market data not connected yet.";
+function average(a){
+ return a.reduce((x,y)=>x+y,0)/a.length;
+}
+function rsi(prices){
+ let gains=0,losses=0;
+ for(let i=prices.length-14;i<prices.length;i++){
+  let d=prices[i]-prices[i-1];
+  if(d>0)gains+=d;
+  else losses-=d;
+ }
+ if(gains===0&&losses===0)return 50;
+ if(losses===0)return 100;
+ let rs=gains/losses;
+ return 100-100/(1+rs);
+}
+function scan(){
+ const symbol=document.getElementById("symbol").value.trim().toUpperCase();
+ const mode=document.getElementById("mode").value;
+ const p=document.getElementById("prices").value.split(/[\s,]+/).filter(Boolean).map(Number);
+ const v=document.getElementById("volumes").value.split(/[\s,]+/).filter(Boolean).map(Number);
+ const out=document.getElementById("result");
+ if(!symbol||p.length<51||p.length!==v.length||
+ p.some(x=>!Number.isFinite(x)||x<=0)||
+ v.some(x=>!Number.isFinite(x)||x<0)){
+  out.textContent="Enter a symbol and at least 51 valid matching closing prices and volumes.";
+  return;
+ }
+ const last=p[p.length-1];
+ const sma20=average(p.slice(-20));
+ const sma50=average(p.slice(-50));
+ const prev20=average(p.slice(-21,-1));
+ const prev50=average(p.slice(-51,-1));
+ const strength=rsi(p);
+ const avgVol=average(v.slice(-21,-1));
+ const volRatio=avgVol>0?v[v.length-1]/avgVol:0;
+ const bullish=last>sma20&&sma20>sma50&&strength>=50&&strength<75&&volRatio>=1.5;
+ const near=last>=sma20*0.98&&last<=sma20*1.02&&sma20>=sma50*0.99;
+ const trend=bullish?"BULLISH CONFIRMED":near?"NEAR BULLISH":"NO CONFIRMED BULLISH SETUP";
+ const support=Math.min(...p.slice(-10));
+ const resistance=Math.max(...p.slice(-20,-1));
+ const entry=bullish&&last>resistance?last:null;
+ const stop=entry?Math.min(support,sma20):null;
+ const risk=entry&&stop<entry?entry-stop:null;
+ const target=risk?entry+2*risk:null;
+ out.innerHTML=`
+ <h2>${symbol} - ${mode}</h2>
+ <b>Signal: <span class="${bullish?'good':'bad'}">${trend}</span></b><hr>
+ Last Close: ${last.toFixed(2)}<br>
+ SMA 20: ${sma20.toFixed(2)}<br>
+ SMA 50: ${sma50.toFixed(2)}<br>
+ Previous SMA 20: ${prev20.toFixed(2)}<br>
+ Previous SMA 50: ${prev50.toFixed(2)}<br>
+ RSI 14 (simple): ${strength.toFixed(1)}<br>
+ Volume Ratio: ${volRatio.toFixed(2)}x<br>
+ Support (10 bars): ${support.toFixed(2)}<br>
+ Resistance (previous 20 bars): ${resistance.toFixed(2)}<hr>
+ Entry: ${entry?entry.toFixed(2):"WAIT"}<br>
+ Target (2R): ${target?target.toFixed(2):"N/A"}<br>
+ Stop Loss: ${risk?stop.toFixed(2):"N/A"}<br>
+ <small>Educational calculations only. Daily data cannot establish an intraday signal. RSI uses a simple 14-period method, not Wilder smoothing. No live feed connected.</small>`;
 }
 </script>
 </body>
