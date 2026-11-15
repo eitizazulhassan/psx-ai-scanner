@@ -28,7 +28,14 @@ jobs:
         run: |
           mkdir -p app/src/main/java/psx/scanner
           mkdir -p app/src/main/res/drawable
+          
+          cp -f "$GITHUB_WORKSPACE/app/src/main/res/drawable/app_icon.xml" app/src/main/res/drawable/app_icon.xml
+          
 
+          
+
+          
+          
           cat > settings.gradle <<'EOF'
           pluginManagement {
               repositories {
