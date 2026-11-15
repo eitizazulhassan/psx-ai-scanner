@@ -76,6 +76,7 @@ jobs:
               <uses-permission android:name="android.permission.INTERNET"/>
               <application
                   android:label="PSX AI Scanner PRO"
+                  android:icon="@drawable/app_icon"
                   android:theme="@android:style/Theme.Material.Light.NoActionBar"
                   android:usesCleartextTraffic="false">
                   <activity
