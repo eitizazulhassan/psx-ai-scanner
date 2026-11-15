@@ -29,7 +29,25 @@ jobs:
           mkdir -p app/src/main/java/psx/scanner
           mkdir -p app/src/main/res/drawable
           
-          cp -f "$GITHUB_WORKSPACE/app/src/main/res/drawable/app_icon.xml" app/src/main/res/drawable/app_icon.xml
+          
+          cat > app/src/main/res/drawable/app_icon.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#0B1730"
+                  android:pathData="M0,0 L108,0 L108,108 L0,108 Z"/>
+              <path android:strokeColor="#23E49B"
+                  android:strokeWidth="6"
+                  android:strokeLineCap="round"
+                  android:strokeLineJoin="round"
+                  android:pathData="M18,78 L38,58 L53,65 L85,28"/>
+              <path android:fillColor="#23E49B"
+                  android:pathData="M70,28 L89,22 L84,42 Z"/>
+          </vector>
+          EOF
+          
           
 
           
